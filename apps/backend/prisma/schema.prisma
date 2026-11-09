@@ -1,0 +1,248 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum GlobalRole {
+  SUPER_ADMIN
+  USER
+}
+
+enum OrgRole {
+  ADMIN
+  FACILITY_MANAGER
+  TECHNICIAN
+  VIEWER
+}
+
+enum AssetStatus {
+  OPERATIONAL
+  DEGRADED
+  DOWN
+  MAINTENANCE
+  RETIRED
+}
+
+enum WorkOrderStatus {
+  OPEN
+  UNDER_REVIEW
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  RESOLVED
+  VERIFIED
+  CLOSED
+  REJECTED
+}
+
+enum WorkOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AssetEventType {
+  REGISTRATION
+  REPAIR
+  INSPECTION
+  RELOCATION
+  STATUS_CHANGE
+  RETIREMENT
+}
+
+// ==========================================
+// AUTH & MULTI-TENANCY
+// ==========================================
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  subdomain String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  members     OrganizationMember[]
+  locations   Location[]
+  departments Department[]
+  assets      Asset[]
+  workOrders  WorkOrder[]
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  globalRole   GlobalRole @default(USER)
+  firstName    String
+  lastName     String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  organizationMembers OrganizationMember[]
+  reportedIssues      WorkOrder[]          @relation("ReportedWorkOrders")
+  assignedWorkOrders  WorkOrder[]          @relation("AssignedWorkOrders")
+  workOrderUpdates    WorkOrderUpdate[]    @relation("UpdatedBy")
+}
+
+model OrganizationMember {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  role           OrgRole  @default(VIEWER)
+  createdAt      DateTime @default(now())
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // A user can only have one membership record per organization
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+// ==========================================
+// ORGANIZATION INFRASTRUCTURE
+// ==========================================
+
+model Location {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assets       Asset[]
+
+  @@unique([organizationId, name])
+}
+
+model Department {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assets       Asset[]
+
+  @@unique([organizationId, name])
+}
+
+// ==========================================
+// ASSET MANAGEMENT
+// ==========================================
+
+model Asset {
+  id             String      @id @default(uuid())
+  organizationId String
+  qrCodeId       String      @unique @default(uuid())
+  name           String
+  category       String
+  manufacturer   String?
+  modelNumber    String?
+  serialNumber   String?
+  purchaseDate   DateTime?
+  warrantyExpiry DateTime?
+  status         AssetStatus @default(OPERATIONAL)
+  metadata       Json?       
+  
+  locationId     String?
+  departmentId   String?
+
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  workOrders   WorkOrder[]
+  history      AssetHistory[]
+
+  @@index([organizationId, category])
+  @@index([organizationId, status])
+}
+
+// ==========================================
+// MAINTENANCE WORKFLOW
+// ==========================================
+
+model WorkOrder {
+  id                   String            @id @default(uuid())
+  organizationId       String
+  assetId              String
+  reporterId           String?           
+  assignedTechnicianId String?
+  status               WorkOrderStatus   @default(OPEN)
+  priority             WorkOrderPriority @default(MEDIUM)
+  
+  title                String
+  description          String            @db.Text
+  faultCategory        String?
+  evidenceUrls         String[]          
+  resolutionNotes      String?           @db.Text
+  
+  version              Int               @default(1) 
+
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  expectedCompletionAt DateTime?         
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+
+  // Relations
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  asset              Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reporter           User?             @relation("ReportedWorkOrders", fields: [reporterId], references: [id], onDelete: SetNull)
+  assignedTechnician User?             @relation("AssignedWorkOrders", fields: [assignedTechnicianId], references: [id], onDelete: SetNull)
+  updates            WorkOrderUpdate[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, assignedTechnicianId])
+}
+
+// Immutable Audit Log for Work Orders
+model WorkOrderUpdate {
+  id               String          @id @default(uuid())
+  workOrderId      String
+  changedByUserId  String?         
+  oldStatus        WorkOrderStatus
+  newStatus        WorkOrderStatus
+  notes            String?         @db.Text
+  createdAt        DateTime        @default(now())
+
+  workOrder        WorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  changedByUser    User?           @relation("UpdatedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId])
+}
+
+// The Digital Asset Passport History
+model AssetHistory {
+  id          String         @id @default(uuid())
+  assetId     String
+  eventType   AssetEventType
+  description String         @db.Text
+  metadata    Json?          
+  timestamp   DateTime       @default(now())
+
+  asset       Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId, timestamp])
+}
