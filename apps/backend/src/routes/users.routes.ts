@@ -2,6 +2,15 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { requireAuth } from '../middleware/authMiddleware';
 
+// 1. Extend the standard Express Request to include our custom user payload
+export interface AuthRequest extends Request {
+  user?: {
+    userId: string;
+    organizationId: string;
+    role: string;
+  };
+}
+
 const router = Router();
 const prisma = new PrismaClient();
 
@@ -10,7 +19,8 @@ const prisma = new PrismaClient();
 router.use(requireAuth);
 
 // GET /api/users/me
-router.get('/me', async (req: Request, res: Response): Promise<void> => {
+// 2. Use AuthRequest instead of Request to fix the TypeScript error
+router.get('/me', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Because requireAuth passed, we know req.user exists and holds our JWT payload
     const userId = req.user!.userId;

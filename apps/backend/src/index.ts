@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/users.routes';
+import assetRoutes from './routes/assets.routes';
 
 dotenv.config();
 
@@ -15,10 +16,18 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
+
+
+app.use(express.json());
 
 // Register API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/assets', assetRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
