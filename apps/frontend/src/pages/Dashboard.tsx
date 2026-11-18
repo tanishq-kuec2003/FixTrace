@@ -6,9 +6,9 @@ import api from '../lib/api';
 interface Asset {
   id: string;
   name: string;
-  description: string | null;
   status: string;
   serialNumber: string;
+  category?: string; // <-- ADDED: category field
 }
 
 export default function Dashboard() {
@@ -39,6 +39,19 @@ export default function Dashboard() {
     fetchAssets();
   }, [navigate]);
 
+  const handleDelete = async (assetId: string) => {
+    // Confirm before deleting to prevent accidents
+    if (!window.confirm('Are you sure you want to delete this equipment?')) return;
+
+    try {
+      await api.delete(`/assets/${assetId}`);
+      // Remove the deleted asset from the UI instantly without refreshing the page
+      setAssets(assets.filter(asset => asset.id !== assetId));
+    } catch (err: any) {
+      alert('Failed to delete asset. Please try again.');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/login');
@@ -48,11 +61,18 @@ export default function Dashboard() {
     <div style={{ padding: '40px', fontFamily: 'sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h2>Protected Assets Dashboard</h2>
-        <button 
-          onClick={handleLogout}
-          style={{ padding: '8px 16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          Logout
-        </button>
+        <div>
+          <button 
+            onClick={() => navigate('/add-asset')}
+            style={{ padding: '8px 16px', backgroundColor: '#0056b3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '10px' }}>
+            + Add Equipment
+          </button>
+          <button 
+            onClick={handleLogout}
+            style={{ padding: '8px 16px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+            Logout
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
@@ -63,20 +83,36 @@ export default function Dashboard() {
           <p>No assets found for your organization.</p>
         ) : (
           assets.map((asset) => (
-            <div key={asset.id} style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+            <div key={asset.id} style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
               <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>{asset.name}</h3>
-              <p style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#666' }}><strong>SN:</strong> {asset.serialNumber}</p>
-              <p style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#666' }}>{asset.description}</p>
-              <span style={{ 
-                padding: '4px 8px', 
-                backgroundColor: asset.status === 'OPERATIONAL' ? '#d4edda' : '#fff3cd', 
-                color: asset.status === 'OPERATIONAL' ? '#155724' : '#856404', 
-                borderRadius: '4px', 
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}>
-                {asset.status}
-              </span>
+              <p style={{ margin: '0 0 15px 0', fontSize: '14px', color: '#666' }}><strong>SN:</strong> {asset.serialNumber}</p>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                <span style={{ 
+                  padding: '4px 8px', 
+                  backgroundColor: asset.status === 'OPERATIONAL' ? '#d4edda' : '#fff3cd', 
+                  color: asset.status === 'OPERATIONAL' ? '#155724' : '#856404', 
+                  borderRadius: '4px', 
+                  fontSize: '12px',
+                  fontWeight: 'bold'
+                }}>
+                  {asset.status}
+                </span>
+                
+                {/* <-- ADDED: Edit button placed next to Delete inside a div wrapper --> */}
+                <div>
+                  <button 
+                    onClick={() => navigate('/edit-asset', { state: { asset } })}
+                    style={{ padding: '6px 12px', backgroundColor: '#ffc107', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', marginRight: '8px' }}>
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(asset.id)}
+                    style={{ padding: '6px 12px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                    Delete
+                  </button>
+                </div>
+              </div>
             </div>
           ))
         )}
