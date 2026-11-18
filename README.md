@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="allfiles/assets/banner.png" alt="FixTrace - Scan it. Report it. Fix it. Trace it." width="100%" />
+<img src="allfiles/assests/banner.png" alt="FixTrace - Scan it. Report it. Fix it. Trace it." width="100%" />
 
 <br/>
 
